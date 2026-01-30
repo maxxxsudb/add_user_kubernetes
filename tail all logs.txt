@@ -1,0 +1,36 @@
+#!/bin/sh
+set -e
+
+LOG_DIR=/opt/nifi/nifi-current/logs
+
+PIDS=""
+SEEN=""
+
+# Аккуратное завершение при остановке пода
+trap 'kill $PIDS 2>/dev/null || true; exit 0' TERM INT EXIT
+
+while :; do
+  for f in "$LOG_DIR"/*.log; do
+    # если файлов нет, glob развернётся в буквальный "/path/*.log" — проверим существование
+    [ -e "$f" ] || continue
+
+    # уже запускали tail для этого файла?
+    case " $SEEN " in
+      *" $f "*) continue ;;
+    esac
+
+    SEEN="$SEEN $f"
+
+    name=$(basename "$f")
+
+    # tail файла и префикс имени файла
+    tail -n0 -F "$f" | while IFS= read -r line; do
+      printf '[%s] %s\n' "$name" "$line"
+    done &
+
+    PIDS="$PIDS $!"
+  done
+
+  # период пересканирования каталога (можно уменьшить/увеличить)
+  sleep 5
+done
